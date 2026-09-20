@@ -1,12 +1,6 @@
-<!-- 
-  Kalendarz - ciemny motyw, font-size: 11px
-  Każda niedziela oznaczona liturgicznie (Adwent, Wielki Post, Wielkanoc, zwykła itd.)
-  Kliknięcie w dzień pokazuje pod kalendarzem nazwę święta / niedzieli.
-  Komórka fioletowa = religijne (ma pierwszeństwo), niebieska = tylko państwowe.
-  Wklej ten blok w miejscu, gdzie wcześniej był <script src=".../calendar/start.php...">
--->
 <div id="kns-calendar-wrapper" style="font-size:11px;">
 <style>
+  html, body { margin: 0; padding: 0; }
   #kns-cal {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 11px;
@@ -14,10 +8,11 @@
     color: #ddd;
     border: 1px solid #444;
     border-radius: 4px;
-    width: 230px;
+    width: 100%;
+    max-width: 230px;
+    box-sizing: border-box;
     margin: 0 auto;
     padding: 6px;
-    box-sizing: border-box;
   }
   #kns-cal .kns-head {
     display: flex;
