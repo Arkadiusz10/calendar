@@ -1,0 +1,403 @@
+<!-- 
+  Kalendarz - ciemny motyw, font-size: 11px
+  Każda niedziela oznaczona liturgicznie (Adwent, Wielki Post, Wielkanoc, zwykła itd.)
+  Kliknięcie w dzień pokazuje pod kalendarzem nazwę święta / niedzieli.
+  Komórka fioletowa = religijne (ma pierwszeństwo), niebieska = tylko państwowe.
+  Wklej ten blok w miejscu, gdzie wcześniej był <script src=".../calendar/start.php...">
+-->
+<div id="kns-calendar-wrapper" style="font-size:11px;">
+<style>
+  #kns-cal {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    background: #2b2b2b;
+    color: #ddd;
+    border: 1px solid #444;
+    border-radius: 4px;
+    width: 230px;
+    margin: 0 auto;
+    padding: 6px;
+    box-sizing: border-box;
+  }
+  #kns-cal .kns-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  #kns-cal .kns-head button {
+    background: #444;
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 1px 6px;
+  }
+  #kns-cal .kns-head button:hover { background: #555; }
+  #kns-cal .kns-title { font-weight: bold; }
+  #kns-cal table { width: 100%; border-collapse: collapse; }
+  #kns-cal th {
+    color: #999;
+    font-weight: normal;
+    padding: 2px 0;
+    text-align: center;
+  }
+  #kns-cal td {
+    text-align: center;
+    padding: 3px 0;
+    cursor: pointer;
+    color: #ccc;
+    border-radius: 3px;
+  }
+  #kns-cal td:hover { background: #3a3a3a; }
+  #kns-cal td.kns-other { color: #555; }
+  #kns-cal td.kns-today {
+    background: #4a90d9;
+    color: #fff;
+    font-weight: bold;
+  }
+  #kns-cal td.kns-holiday-rel {
+    background: #4a3a5a;
+    color: #dcc4f5;
+    font-weight: normal;
+  }
+  #kns-cal td.kns-holiday-state {
+    background: #2f3f5a;
+    color: #a9cdf0;
+    font-weight: normal;
+  }
+  #kns-cal td.kns-holiday-rel.kns-today {
+    background: #7a4fae;
+    color: #fff;
+  }
+  #kns-cal td.kns-holiday-state.kns-today {
+    background: #3f6aa8;
+    color: #fff;
+  }
+  #kns-info {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid #444;
+    font-size: 11px;
+    color: #bbb;
+    min-height: 14px;
+  }
+  #kns-info .kns-info-date { color: #888; margin-right: 4px; }
+  #kns-info .kns-info-name { color: #ddd; }
+  #kns-info.kns-empty .kns-info-name { color: #777; font-style: italic; }
+</style>
+<div id="kns-cal">
+  <div class="kns-head">
+    <button id="kns-prev">&laquo;</button>
+    <span class="kns-title" id="kns-title"></span>
+    <button id="kns-next">&raquo;</button>
+  </div>
+  <table>
+    <thead>
+      <tr id="kns-dow"></tr>
+    </thead>
+    <tbody id="kns-body"></tbody>
+  </table>
+  <div id="kns-info"></div>
+</div>
+</div>
+
+<script>
+(function () {
+  var monthsPL = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
+  var dowPL = ["Pn","Wt","Śr","Cz","Pt","So","Nd"];
+
+  function toRoman(num) {
+    var map = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+    var res = '';
+    map.forEach(function (p) {
+      while (num >= p[0]) { res += p[1]; num -= p[0]; }
+    });
+    return res;
+  }
+
+  // Wielkanoc - algorytm Meeusa/Jonesa/Butchera (do wyliczania świąt ruchomych)
+  function easterDate(year) {
+    var a = year % 19, b = Math.floor(year / 100), c = year % 100;
+    var d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+    var g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+    var i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+    var m = Math.floor((a + 11 * h + 22 * l) / 451);
+    var month = Math.floor((h + l - 7 * m + 114) / 31);
+    var day = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(year, month - 1, day);
+  }
+
+  function addDays(date, n) {
+    var d = new Date(date);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+
+  function fmt(d) {
+    return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  }
+
+  function fmtDisplay(d) {
+    var dd = ("0" + d.getDate()).slice(-2);
+    var mm = ("0" + (d.getMonth() + 1)).slice(-2);
+    return dd + "." + mm + "." + d.getFullYear();
+  }
+
+  // 1. Niedziela Adwentu = niedziela najbliższa 30 listopada (przedział 27.11-3.12)
+  function firstAdventSunday(year) {
+    var nov30 = new Date(year, 10, 30);
+    var dow = nov30.getDay(); // 0=Nd..6=So
+    if (dow === 0) return nov30;
+    var prevSunday = addDays(nov30, -dow);
+    var nextSunday = addDays(nov30, 7 - dow);
+    return dow <= (7 - dow) ? prevSunday : nextSunday;
+  }
+
+  // stałe i ruchome święta (nazwane) dla danego roku kalendarzowego
+  function fixedHolidaysForYear(year) {
+    var h = {};
+    function add(date, name, types) {
+      var key = fmt(date);
+      if (!h[key]) h[key] = [];
+      h[key].push({ name: name, types: types, date: date });
+    }
+
+    add(new Date(year, 0, 1), "Świętej Bożej Rodzicielki Maryi (nakazane)", ["rel", "state"]);
+    add(new Date(year, 0, 6), "Objawienie Pańskie / Trzech Króli (nakazane)", ["rel", "state"]);
+    add(new Date(year, 0, 25), "Nawrócenie św. Pawła Apostoła (wspomnienie)", ["rel"]);
+    add(new Date(year, 1, 2), "Ofiarowanie Pańskie (Matki Bożej Gromnicznej)", ["rel"]);
+    add(new Date(year, 2, 19), "Św. Józefa, Oblubieńca NMP", ["rel"]);
+    add(new Date(year, 2, 25), "Zwiastowanie Pańskie", ["rel"]);
+    add(new Date(year, 3, 23), "Św. Wojciecha, patrona Polski", ["rel", "state"]);
+    add(new Date(year, 3, 25), "Św. Marka Ewangelisty (wspomnienie)", ["rel"]);
+    add(new Date(year, 4, 1), "Święto Pracy", ["state"]);
+    add(new Date(year, 4, 3), "Święto Konstytucji 3 Maja", ["state"]);
+    add(new Date(year, 4, 4), "Św. Floriana (wspomnienie)", ["rel"]);
+    add(new Date(year, 4, 8), "Św. Stanisława BM, patrona Polski", ["rel", "state"]);
+    add(new Date(year, 5, 24), "Narodzenie św. Jana Chrzciciela", ["rel"]);
+    add(new Date(year, 5, 29), "Świętych Apostołów Piotra i Pawła", ["rel"]);
+    add(new Date(year, 6, 3), "Św. Tomasza Apostoła (wspomnienie)", ["rel"]);
+    add(new Date(year, 6, 22), "Św. Marii Magdaleny (wspomnienie)", ["rel"]);
+    add(new Date(year, 6, 25), "Św. Jakuba Apostoła (wspomnienie)", ["rel"]);
+    add(new Date(year, 7, 6), "Przemienienie Pańskie", ["rel"]);
+    add(new Date(year, 7, 14), "Św. Maksymiliana Marii Kolbego", ["rel"]);
+    add(new Date(year, 7, 15), "Wniebowzięcie NMP (nakazane)", ["rel", "state"]);
+    add(new Date(year, 7, 24), "Św. Bartłomieja Apostoła (wspomnienie)", ["rel"]);
+    add(new Date(year, 8, 8), "Narodzenie NMP", ["rel"]);
+    add(new Date(year, 8, 14), "Podwyższenie Krzyża Świętego", ["rel"]);
+    add(new Date(year, 8, 29), "Świętych Archaniołów Michała, Gabriela i Rafała", ["rel"]);
+    add(new Date(year, 9, 4), "Św. Franciszka z Asyżu (wspomnienie)", ["rel"]);
+    add(new Date(year, 10, 1), "Wszystkich Świętych (nakazane)", ["rel", "state"]);
+    add(new Date(year, 10, 2), "Dzień Zaduszny (Wspomnienie Wszystkich Wiernych Zmarłych)", ["rel"]);
+    add(new Date(year, 10, 11), "Narodowe Święto Niepodległości", ["state"]);
+    add(new Date(year, 10, 30), "Św. Andrzeja Apostoła (wspomnienie)", ["rel"]);
+    add(new Date(year, 11, 6), "Św. Mikołaja (wspomnienie)", ["rel"]);
+    add(new Date(year, 11, 8), "Niepokalane Poczęcie NMP (nakazane)", ["rel", "state"]);
+    add(new Date(year, 11, 13), "Św. Łucji (wspomnienie)", ["rel"]);
+    add(new Date(year, 11, 24), "Wigilia", ["rel"]);
+    add(new Date(year, 11, 25), "Boże Narodzenie (nakazane)", ["rel", "state"]);
+    add(new Date(year, 11, 26), "Św. Szczepana (nakazane)", ["rel", "state"]);
+    add(new Date(year, 11, 27), "Św. Jana Apostoła i Ewangelisty (wspomnienie)", ["rel"]);
+    add(new Date(year, 11, 28), "Świętych Młodzianków, Męczenników", ["rel"]);
+
+    var easter = easterDate(year);
+    add(easter, "Wielkanoc (nakazane)", ["rel"]);
+    add(addDays(easter, 1), "Poniedziałek Wielkanocny", ["rel", "state"]);
+    add(addDays(easter, -46), "Środa Popielcowa", ["rel"]);
+    add(addDays(easter, -7), "Niedziela Palmowa", ["rel"]);
+    add(addDays(easter, -3), "Wielki Czwartek", ["rel"]);
+    add(addDays(easter, -2), "Wielki Piątek", ["rel"]);
+    add(addDays(easter, -1), "Wielka Sobota", ["rel"]);
+    add(addDays(easter, 39), "Wniebowstąpienie Pańskie", ["rel"]);
+    add(addDays(easter, 49), "Zesłanie Ducha Świętego (Zielone Świątki, nakazane)", ["rel", "state"]);
+    add(addDays(easter, 60), "Boże Ciało (nakazane)", ["rel", "state"]);
+
+    return h;
+  }
+
+  // dopisuje do "h" wszystkie oznaczone niedziele roku liturgicznego zaczynającego się
+  // Adwentem w roku kalendarzowym S (czyli trwającego S(XI/XII) -> (S+1)(XI))
+  function addLiturgicalSundays(h, S) {
+    function add(date, name) {
+      var key = fmt(date);
+      if (!h[key]) h[key] = [];
+      h[key].push({ name: name, types: ["rel"], date: date });
+    }
+
+    var advent1 = firstAdventSunday(S);
+    var nextAdvent1 = firstAdventSunday(S + 1);
+    var christmas = new Date(S, 11, 25);
+    var easter = easterDate(S + 1);
+    var pentecost = addDays(easter, 49);
+    var epiphany = new Date(S + 1, 0, 6);
+    var trinitySunday = addDays(pentecost, 7);
+
+    // Adwent I-IV
+    for (var w = 1; w <= 4; w++) {
+      var sd = addDays(advent1, (w - 1) * 7);
+      if (sd < christmas) add(sd, toRoman(w) + " Niedziela Adwentu");
+    }
+
+    // Niedziela Świętej Rodziny (niedziela w oktawie Bożego Narodzenia, 26-31.12)
+    for (var dnum = 26; dnum <= 31; dnum++) {
+      var dt = new Date(S, 11, dnum);
+      if (dt.getDay() === 0) { add(dt, "Niedziela Świętej Rodziny"); break; }
+    }
+
+    // Niedziela Chrztu Pańskiego (niedziela po Objawieniu Pańskim, chyba że 6.01 wypada w niedzielę)
+    var baptism = null;
+    if (epiphany.getDay() !== 0) {
+      var toSun = (7 - epiphany.getDay()) % 7;
+      if (toSun === 0) toSun = 7;
+      baptism = addDays(epiphany, toSun);
+      add(baptism, "Niedziela Chrztu Pańskiego");
+    }
+
+    // Okres zwykły cz.1: od niedzieli po Chrzcie Pańskim do Środy Popielcowej
+    var ashWednesday = addDays(easter, -46);
+    if (baptism) {
+      var w1 = 2, sd1 = addDays(baptism, 7);
+      while (sd1 < ashWednesday) {
+        add(sd1, toRoman(w1) + " Niedziela zwykła");
+        w1++; sd1 = addDays(baptism, (w1 - 1) * 7);
+      }
+    }
+
+    // Wielki Post I-V (Niedziela Palmowa liczona osobno, już dodana jako stałe święto ruchome)
+    for (var wl = 1; wl <= 5; wl++) {
+      add(addDays(easter, -42 + (wl - 1) * 7), toRoman(wl) + " Niedziela Wielkiego Postu");
+    }
+
+    // Okres wielkanocny II-VI (Wielkanoc i Zesłanie Ducha Świętego dodane osobno)
+    for (var we = 2; we <= 6; we++) {
+      add(addDays(easter, (we - 1) * 7), toRoman(we) + " Niedziela Wielkanocna");
+    }
+
+    add(trinitySunday, "Niedziela Trójcy Świętej");
+
+    // Okres zwykły cz.2: od niedzieli po Trójcy Świętej do ostatniej niedzieli przed Adwentem
+    var firstPart2 = addDays(trinitySunday, 7);
+    var lastOrdinary = addDays(nextAdvent1, -7);
+    if (firstPart2 <= lastOrdinary) {
+      var n = Math.round((lastOrdinary - firstPart2) / (7 * 86400000)) + 1;
+      for (var j = 0; j < n; j++) {
+        var sd2 = addDays(firstPart2, j * 7);
+        var week = 34 - (n - 1 - j);
+        var label = toRoman(week) + " Niedziela zwykła";
+        if (j === n - 1) label = "Uroczystość Chrystusa Króla (" + label + ")";
+        add(sd2, label);
+      }
+    }
+  }
+
+  var today = new Date();
+  var view = { year: today.getFullYear(), month: today.getMonth() };
+
+  var titleEl = document.getElementById("kns-title");
+  var bodyEl = document.getElementById("kns-body");
+  var dowEl = document.getElementById("kns-dow");
+  var infoEl = document.getElementById("kns-info");
+
+  dowPL.forEach(function (d) {
+    var th = document.createElement("th");
+    th.textContent = d;
+    dowEl.appendChild(th);
+  });
+
+  function getHolidaysMerged(year) {
+    var merged = {};
+    [year - 1, year, year + 1].forEach(function (y) {
+      var h = fixedHolidaysForYear(y);
+      Object.keys(h).forEach(function (k) {
+        merged[k] = (merged[k] || []).concat(h[k]);
+      });
+    });
+    [year - 2, year - 1, year, year + 1].forEach(function (S) {
+      addLiturgicalSundays(merged, S);
+    });
+    return merged;
+  }
+
+  function showInfo(d, items) {
+    if (items && items.length) {
+      var names = items.map(function (i) { return i.name; }).join(", ");
+      infoEl.className = "";
+      infoEl.innerHTML = '<span class="kns-info-date">' + fmtDisplay(d) + '</span><span class="kns-info-name">' + names + '</span>';
+    } else {
+      infoEl.className = "kns-empty";
+      infoEl.innerHTML = '<span class="kns-info-date">' + fmtDisplay(d) + '</span><span class="kns-info-name">brak święta</span>';
+    }
+  }
+
+  function render() {
+    var year = view.year, month = view.month;
+    titleEl.textContent = monthsPL[month] + " " + year;
+
+    var holidays = getHolidaysMerged(year);
+
+    var firstDay = new Date(year, month, 1);
+    var startOffset = (firstDay.getDay() + 6) % 7; // pon=0
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var daysInPrevMonth = new Date(year, month, 0).getDate();
+
+    bodyEl.innerHTML = "";
+    var cellDate = 1 - startOffset;
+    for (var row = 0; row < 6; row++) {
+      var tr = document.createElement("tr");
+      var rowHasCurrentMonth = false;
+      for (var col = 0; col < 7; col++) {
+        var td = document.createElement("td");
+        var d, cls = [];
+        if (cellDate < 1) {
+          d = new Date(year, month - 1, daysInPrevMonth + cellDate);
+          cls.push("kns-other");
+        } else if (cellDate > daysInMonth) {
+          d = new Date(year, month + 1, cellDate - daysInMonth);
+          cls.push("kns-other");
+        } else {
+          d = new Date(year, month, cellDate);
+          rowHasCurrentMonth = true;
+        }
+        td.textContent = d.getDate();
+
+        var key = fmt(d);
+        var items = holidays[key];
+        if (items) {
+          var hasRel = items.some(function (i) { return i.types.indexOf("rel") !== -1; });
+          cls.push(hasRel ? "kns-holiday-rel" : "kns-holiday-state");
+        }
+        if (fmt(d) === fmt(today)) cls.push("kns-today");
+
+        td.className = cls.join(" ");
+        (function (dCopy, itemsCopy) {
+          td.addEventListener("click", function () {
+            showInfo(dCopy, itemsCopy);
+          });
+          if (fmt(dCopy) === fmt(today) && year === today.getFullYear() && month === today.getMonth()) {
+            showInfo(dCopy, itemsCopy);
+          }
+        })(d, items);
+        tr.appendChild(td);
+        cellDate++;
+      }
+      bodyEl.appendChild(tr);
+      if (!rowHasCurrentMonth && row > 3) break;
+    }
+  }
+
+  document.getElementById("kns-prev").addEventListener("click", function () {
+    view.month--;
+    if (view.month < 0) { view.month = 11; view.year--; }
+    render();
+  });
+  document.getElementById("kns-next").addEventListener("click", function () {
+    view.month++;
+    if (view.month > 11) { view.month = 0; view.year++; }
+    render();
+  });
+
+  render();
+})();
+</script>
